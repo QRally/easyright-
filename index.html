@@ -478,7 +478,18 @@
       const totalCornerMeters = haversineDistance(points[0], points[points.length - 1]);
       totalStageDistance += totalCornerMeters;
 
-      let modifier = totalCornerMeters > 100 ? ' LONG' : '';
+      // Multi-tiered 'LONG' threshold based on corner grade
+let longThreshold = 70; 
+
+if (grade <= 2) {
+  longThreshold = 45;   // Tight corners (R1/R2) feel 'LONG' at shorter distances
+} else if (grade <= 4) {
+  longThreshold = 75;   // Medium corners (R3/R4)
+} else {
+  longThreshold = 120;  // Fast sweepers (R5/R6) need a substantial arc to trigger 'LONG'
+}
+
+let modifier = totalCornerMeters > longThreshold ? ' LONG' : '';
       const noteText = `${dir}${grade}${modifier}`;
 
       capturedNotes.push({
