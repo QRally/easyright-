@@ -478,7 +478,7 @@
       const totalCornerMeters = haversineDistance(points[0], points[points.length - 1]);
       totalStageDistance += totalCornerMeters;
 
-      let modifier = totalCornerMeters > 70 ? ' LONG' : '';
+      let modifier = totalCornerMeters > 100 ? ' LONG' : '';
       const noteText = `${dir}${grade}${modifier}`;
 
       capturedNotes.push({
