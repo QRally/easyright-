@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Live Recce Pace Logger v1.6</title>
+  <style>
+    :root {
+      --bg-color: #0d0d11;
+      --panel-bg: #181820;
+      --accent-green: #00e676;
+      --accent-red: #ff1744;
+      --accent-blue: #29b6f6;
+      --accent-yellow: #ffd600;
+      --text-color: #f0f0f0;
+      --font-mono: 'Courier New', Courier, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Dashboard Status Bar */
+    header {
+      background: var(--panel-bg);
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #2a2a35;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+    }
+    .stat-box { text-align: center; }
+    .stat-val { font-size: 1.1rem; font-weight: bold; font-family: var(--font-mono); color: var(--accent-green); }
+    
+    .status-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .wakelock-tag { font-size: 0.7rem; color: #888; text-align: right; }
+    .wakelock-tag.active { color: var(--accent-green); }
+
+    /* Mode Toggle Button */
+    .mode-btn {
+      background: #252530;
+      color: var(--accent-yellow);
+      border: 1px solid var(--accent-yellow);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      letter-spacing: 0.5px;
+    }
+    .mode-btn.easywrite {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    /* Main Content Area */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    /* Driver Action Button */
+    #action-btn {
+      height: 180px;
+      flex-shrink: 0;
+      border: none;
+      border-radius: 16px;
+      background: var(--accent-green);
+      color: #000;
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      box-shadow: 0 8px 24px rgba(0,230,118,0.3);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.1s ease, background-color 0.2s ease;
+    }
+    #action-btn:active { transform: scale(0.98); }
+    #action-btn.recording {
+      background: var(--accent-red);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(255,23,68,0.4);
+      animation: pulse 1.5s infinite;
+    }
+    #action-btn p { font-size: 0.85rem; font-weight: normal; opacity: 0.8; text-transform: none; }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7); }
+      70% { box-shadow: 0 0 0 20px rgba(255, 23, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); }
+    }
+
+    /* Scrollable Notes Container */
+    .feed-container {
+      flex: 1;
+      background: var(--panel-bg);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #2a2a35;
+      min-height: 0;
+    }
+    .feed-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #888;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .feed-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .feed-item {
+      background: #101014;
+      padding: 10px 12px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 4px solid var(--accent-blue);
+      font-family: var(--font-mono);
+    }
+    .feed-item.R { border-left-color: #ff5252; }
+    .feed-item.L { border-left-color: #448aff; }
+    .feed-item.STRAIGHT { border-left-color: #4caf50; }
+    .feed-call { font-size: 1.2rem; font-weight: bold; color: #fff; }
+    .feed-meta { font-size: 0.8rem; color: #aaa; text-align: right; }
+
+    /* Permanently Fixed Footer Bar */
+    footer {
+      padding: 12px;
+      background: var(--panel-bg);
+      border-top: 1px solid #2a2a35;
+      flex-shrink: 0;
+    }
+    .btn-full {
+      width: 100%;
+      background: #252530;
+      color: #fff;
+      border: 1px solid #3a3a4a;
+      padding: 14px;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+      letter-spacing: 1px;
+    }
+    .btn-full:hover { background: #323242; border-color: var(--accent-green); }
+  </style>
+</head>
+<body tabindex="0">
+
+  <header>
+    <div class="stat-box">
+      <div>SPEED</div>
+      <div class="stat-val" id="speed-val">0 <span style="font-size:0.6rem">MPH</span></div>
+    </div>
+    <div class="stat-box">
+      <div>GPS ACC</div>
+      <div class="stat-val" id="acc-val">--</div>
+    </div>
+    <div class="status-right">
+      <button class="mode-btn easywrite" id="mode-toggle-btn">MODE: EASYWRITE</button>
+      <div class="wakelock-tag" id="wakelock-status">WAKE LOCK: OFF</div>
+    </div>
+  </header>
+
+  <main>
+    <button id="action-btn">
+      <span id="btn-label">START CORNER</span>
+      <p id="btn-subtext">Tap screen or click BT remote</p>
+    </button>
+
+    <div class="feed-container">
+      <div class="feed-header">
+        <span>Captured Notes</span>
+        <span id="note-count">0 calls</span>
+      </div>
+      <div class="feed-list" id="feed-list">
+        <div style="text-align:center; padding:30px; color:#555; font-size:0.85rem;">Ready for capture (Screen or BT Remote)</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <button class="btn-full" id="export-csv-btn">EXPORT CSV</button>
+  </footer>
+
+  <script>
+    let calibrationMode = 'easywrite'; // 'easywrite' or 'standard'
+
+    let wakeLock = null;
+    let isRecordingCorner = false;
+    let currentCornerPoints = [];
+    let capturedNotes = [];
+    let rollingBuffer = [];
+    let lastCornerEndPoint = null;
+    let watchPositionId = null;
+    let totalStageDistance = 0;
+
+    const actionBtn = document.getElementById('action-btn');
+    const btnLabel = document.getElementById('btn-label');
+    const btnSubtext = document.getElementById('btn-subtext');
+    const feedList = document.getElementById('feed-list');
+    const speedVal = document.getElementById('speed-val');
+    const accVal = document.getElementById('acc-val');
+    const wakelockStatus = document.getElementById('wakelock-status');
+    const noteCount = document.getElementById('note-count');
+    const modeToggleBtn = document.getElementById('mode-toggle-btn');
+
+    // Toggle Calibration Profile
+    modeToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (calibrationMode === 'easywrite') {
+        calibrationMode = 'standard';
+        modeToggleBtn.innerText = 'MODE: STANDARD';
+        modeToggleBtn.classList.remove('easywrite');
+      } else {
+        calibrationMode = 'easywrite';
+        modeToggleBtn.innerText = 'MODE: EASYWRITE';
+        modeToggleBtn.classList.add('easywrite');
+      }
+    });
+
+    // Ensure document body has focus for keyboard remote events
+    window.addEventListener('DOMContentLoaded', () => { document.body.focus(); });
+    window.addEventListener('click', () => { document.body.focus(); });
+
+    // Wake Lock API Resiliency
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator && !wakeLock) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakelockStatus.innerText = 'WAKE LOCK: ON';
+          wakelockStatus.classList.add('active');
+
+          wakeLock.addEventListener('release', () => {
+            wakeLock = null;
+            wakelockStatus.innerText = 'WAKE LOCK: OFF';
+            wakelockStatus.classList.remove('active');
+          });
+        } catch (err) {
+          wakelockStatus.innerText = 'WAKE LOCK: FAILED';
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', async () => {
+      if (wakeLock === null && document.visibilityState === 'visible' && isRecordingCorner) {
+        await requestWakeLock();
+      }
+    });
+
+    // Audio Context Resiliency
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playBeep(freq, type, duration) {
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration);
+      } catch (err) {
+        console.warn('Audio playback error:', err);
+      }
+    }
+
+    // Hook into Media Session API for Bluetooth Remote triggers
+    if ('mediaSession' in navigator) {
+      try {
+        const handleMediaAction = () => { triggerAction(); };
+        navigator.mediaSession.setActionHandler('play', handleMediaAction);
+        navigator.mediaSession.setActionHandler('pause', handleMediaAction);
+        navigator.mediaSession.setActionHandler('previoustrack', handleMediaAction);
+        navigator.mediaSession.setActionHandler('nexttrack', handleMediaAction);
+
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: 'Live Recce Logger',
+          artist: 'RODGE Automotive',
+          album: 'Stage Notes Active'
+        });
+      } catch (err) {
+        console.log('Media Session not supported or blocked', err);
+      }
+    }
+
+    function startGPSWatch() {
+      if (!('geolocation' in navigator)) {
+        alert("Geolocation is not supported by your device.");
+        return;
+      }
+
+      watchPositionId = navigator.geolocation.watchPosition(
+        (pos) => handleGPSPosition(pos),
+        (err) => console.warn('GPS Error:', err),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    }
+
+    function handleGPSPosition(pos) {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const accuracy = Math.round(pos.coords.accuracy);
+      const speed = pos.coords.speed ? Math.round(pos.coords.speed * 2.23694) : 0;
+      const timestamp = pos.timestamp;
+
+      accVal.innerText = `±${accuracy}m`;
+      speedVal.innerHTML = `${speed} <span style="font-size:0.6rem">MPH</span>`;
+
+      const pt = { lat, lon, timestamp, speed };
+
+      rollingBuffer.push(pt);
+      while (rollingBuffer.length > 0 && (timestamp - rollingBuffer[0].timestamp) > 2000) {
+        rollingBuffer.shift();
+      }
+
+      if (isRecordingCorner) {
+        currentCornerPoints.push(pt);
+      }
+    }
+
+    function triggerAction() {
+      getAudioContext();
+      requestWakeLock();
+
+      if (!isRecordingCorner) {
+        isRecordingCorner = true;
+        actionBtn.classList.add('recording');
+        btnLabel.innerText = 'END CORNER';
+        btnSubtext.innerText = 'Click remote on exit';
+        playBeep(880, 'sine', 0.15);
+        currentCornerPoints = [...rollingBuffer];
+      } else {
+        isRecordingCorner = false;
+        actionBtn.classList.remove('recording');
+        btnLabel.innerText = 'START CORNER';
+        btnSubtext.innerText = 'Click remote at turn-in';
+        playBeep(440, 'sine', 0.25);
+        processCapturedCorner(currentCornerPoints);
+        currentCornerPoints = [];
+      }
+    }
+
+    actionBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      triggerAction();
+    });
+
+    const handleKeyEvent = (e) => {
+      const isRemoteKey = 
+        e.code === 'Space' || e.code === 'Enter' || 
+        e.key === ' ' || e.key === 'Enter' || 
+        e.keyCode === 32 || e.keyCode === 13 ||
+        e.key === 'MediaPlayPause' || e.key === 'MediaTrackNext' || e.key === 'MediaTrackPrevious';
+
+      if (isRemoteKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerAction();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyEvent);
+    window.addEventListener('keyup', handleKeyEvent);
+
+    function processCapturedCorner(points) {
+      if (points.length < 3) {
+        alert("Not enough GPS points captured. Drive further through the bend.");
+        return;
+      }
+
+      if (lastCornerEndPoint && points.length > 0) {
+        const dMeters = haversineDistance(lastCornerEndPoint, points[0]);
+        const straightDistCall = Math.round(dMeters / 10) * 10;
+        totalStageDistance += dMeters;
+
+        if (straightDistCall >= 30) {
+          capturedNotes.push({
+            type: 'STRAIGHT',
+            text: `${straightDistCall}`,
+            segmentLen: Math.round(dMeters),
+            accumDist: Math.round(totalStageDistance)
+          });
+        }
+      }
+
+      const xy = convertToMeters(points);
+      let minR = 9999;
+      let rCount = 0, lCount = 0;
+
+      for (let i = 1; i < xy.length - 1; i++) {
+        const p1 = xy[i - 1], p2 = xy[i], p3 = xy[i + 1];
+        const a = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const b = Math.hypot(p3.x - p2.x, p3.y - p2.y);
+        const c = Math.hypot(p3.x - p1.x, p3.y - p1.y);
+        const area = Math.abs((p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x)) / 2;
+
+        let r = (area > 0.001) ? (a * b * c) / (4 * area) : 9999;
+        if (r < minR) minR = r;
+
+        const cross = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+        if (cross > 0) lCount++; else rCount++;
+      }
+
+      const dir = rCount >= lCount ? 'R' : 'L';
+
+      let grade = 6;
+      if (calibrationMode === 'easywrite') {
+        if (minR < 15) grade = 1;
+        else if (minR < 30) grade = 2;
+        else if (minR < 55) grade = 3;
+        else if (minR < 85) grade = 4;
+        else if (minR < 120) grade = 5;
+        else grade = 6;
+      } else {
+        if (minR < 18) grade = 1;
+        else if (minR < 35) grade = 2;
+        else if (minR < 60) grade = 3;
+        else if (minR < 90) grade = 4;
+        else if (minR < 130) grade = 5;
+        else grade = 6;
+      }
+
+      const totalCornerMeters = haversineDistance(points[0], points[points.length - 1]);
+      totalStageDistance += totalCornerMeters;
+
+      let modifier = totalCornerMeters > 70 ? ' LONG' : '';
+      const noteText = `${dir}${grade}${modifier}`;
+
+      capturedNotes.push({
+        type: dir,
+        text: noteText,
+        segmentLen: Math.round(totalCornerMeters),
+        accumDist: Math.round(totalStageDistance)
+      });
+
+      lastCornerEndPoint = points[points.length - 1];
+      renderFeed();
+    }
+
+    function haversineDistance(p1, p2) {
+      const R = 6371000;
+      const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+      const dLon = (p2.lon - p1.lon) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function convertToMeters(coords) {
+      const R = 6371000;
+      const origin = coords[0];
+      const lat0 = origin.lat * Math.PI / 180;
+
+      return coords.map(pt => {
+        const dLat = (pt.lat - origin.lat) * Math.PI / 180;
+        const dLon = (pt.lon - origin.lon) * Math.PI / 180;
+        return {
+          x: dLon * Math.cos(lat0) * R,
+          y: dLat * R
+        };
+      });
+    }
+
+    function renderFeed() {
+      feedList.innerHTML = '';
+      let callCount = 0;
+
+      capturedNotes.forEach(note => {
+        if (note.type !== 'STRAIGHT') callCount++;
+
+        const item = document.createElement('div');
+        item.className = `feed-item ${note.type}`;
+        item.innerHTML = `
+          <div class="feed-call">${note.text}</div>
+          <div class="feed-meta">+${note.accumDist}m | ${note.segmentLen}m len</div>
+        `;
+        feedList.insertBefore(item, feedList.firstChild);
+      });
+
+      noteCount.innerText = `${callCount} calls`;
+    }
+
+    // CSV Exporter
+    document.getElementById('export-csv-btn').addEventListener('click', () => {
+      if (!capturedNotes.length) return alert('No notes captured yet.');
+
+      let csvContent = "data:text/csv;charset=utf-8,Index,Type,Note Call,Segment Length (m),Cumulative Distance (m)\n";
+      capturedNotes.forEach((n, idx) => {
+        csvContent += `${idx + 1},${n.type},${n.text},${n.segmentLen},${n.accumDist}\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `recce_pace_notes_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    startGPSWatch();
+  </script>
+</body>
+</html>
