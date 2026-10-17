@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Live Recce Pace Logger v1.6</title>
+  <title>Live Recce Pace Logger v1.7</title>
   <style>
     :root {
       --bg-color: #0d0d11;
@@ -478,18 +478,17 @@
       const totalCornerMeters = haversineDistance(points[0], points[points.length - 1]);
       totalStageDistance += totalCornerMeters;
 
-      // Multi-tiered 'LONG' threshold based on corner grade
-     let longThreshold = 70; 
+      // Fixed: properly declared longThreshold
+      let longThreshold = 70;
+      if (grade <= 2) {
+        longThreshold = 45;
+      } else if (grade <= 4) {
+        longThreshold = 75;
+      } else {
+        longThreshold = 120;
+      }
 
-     if (grade <= 2) {
-     longThreshold = 45;   // Tight corners (R1/R2) feel 'LONG' at shorter distances
-     } else if (grade <= 4) {
-     longThreshold = 75;   // Medium corners (R3/R4)
-     } else {
-     longThreshold = 120;  // Fast sweepers (R5/R6) need a substantial arc to trigger 'LONG'
-     }
-
-     let modifier = totalCornerMeters > longThreshold ? ' LONG' : '';
+      let modifier = totalCornerMeters > longThreshold ? ' LONG' : '';
       const noteText = `${dir}${grade}${modifier}`;
 
       capturedNotes.push({
