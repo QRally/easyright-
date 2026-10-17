@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Live Recce Pace Logger v1.9</title>
+  <title>Live Recce Pace Logger v2.3</title>
   <style>
     :root {
       --bg-color: #0d0d11;
@@ -82,17 +82,18 @@
       padding: 12px;
       gap: 12px;
       min-height: 0;
+      overflow: hidden;
     }
 
     /* Driver Action Button */
     #action-btn {
-      height: 180px;
+      height: 130px;
       flex-shrink: 0;
       border: none;
       border-radius: 16px;
       background: var(--accent-green);
       color: #000;
-      font-size: 2rem;
+      font-size: 1.8rem;
       font-weight: 900;
       letter-spacing: 2px;
       text-transform: uppercase;
@@ -102,7 +103,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 6px;
       transition: transform 0.1s ease, background-color 0.2s ease;
     }
     #action-btn:active { transform: scale(0.98); }
@@ -112,7 +113,7 @@
       box-shadow: 0 8px 24px rgba(255,23,68,0.4);
       animation: pulse 1.5s infinite;
     }
-    #action-btn p { font-size: 0.85rem; font-weight: normal; opacity: 0.8; text-transform: none; }
+    #action-btn p { font-size: 0.85rem; font-weight: normal; opacity: 0.85; text-transform: none; }
 
     @keyframes pulse {
       0% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7); }
@@ -130,6 +131,7 @@
       flex-direction: column;
       border: 1px solid #2a2a35;
       min-height: 0;
+      overflow: hidden;
     }
     .feed-header {
       display: flex;
@@ -140,28 +142,71 @@
       text-transform: uppercase;
       flex-shrink: 0;
     }
+
+    /* Fixed Scrollable List View */
     .feed-list {
       flex: 1;
-      overflow-y: auto;
+      overflow-y: scroll;
+      -webkit-overflow-scrolling: touch;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
+      padding-right: 4px;
+      min-height: 0;
     }
-    .feed-item {
+
+    /* Prevent item squishing */
+    .feed-item-wrapper {
       background: #101014;
-      padding: 10px 12px;
       border-radius: 6px;
+      overflow: hidden;
+      border-left: 4px solid var(--accent-blue);
+      font-family: var(--font-mono);
+      flex-shrink: 0; /* Prevents rows from squishing */
+      min-height: 48px;
+    }
+    .feed-item-wrapper.editing {
+      border: 1px solid #3a3a4a;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .feed-item-wrapper.R { border-left-color: #ff5252; }
+    .feed-item-wrapper.L { border-left-color: #448aff; }
+    .feed-item-wrapper.STRAIGHT { border-left-color: #4caf50; }
+
+    .feed-item-main {
+      padding: 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-left: 4px solid var(--accent-blue);
-      font-family: var(--font-mono);
+      cursor: pointer;
     }
-    .feed-item.R { border-left-color: #ff5252; }
-    .feed-item.L { border-left-color: #448aff; }
-    .feed-item.STRAIGHT { border-left-color: #4caf50; }
     .feed-call { font-size: 1.2rem; font-weight: bold; color: #fff; }
     .feed-meta { font-size: 0.8rem; color: #aaa; text-align: right; }
+
+    /* Inline Edit Drawer Grid Layout */
+    .edit-drawer {
+      display: none;
+      background: #1f1f2b;
+      padding: 10px;
+      border-top: 1px solid #2a2a35;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .edit-drawer.open { display: grid; }
+    .edit-btn {
+      background: #2b2b3a;
+      color: #fff;
+      border: 1px solid #444;
+      padding: 10px 6px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      cursor: pointer;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .edit-btn:hover { background: #3b3b4d; }
+    .edit-btn.danger { background: rgba(255,23,68,0.25); color: var(--accent-red); border-color: var(--accent-red); grid-column: span 3; }
 
     /* Permanently Fixed Footer Bar */
     footer {
@@ -211,7 +256,7 @@
 
     <div class="feed-container">
       <div class="feed-header">
-        <span>Captured Notes</span>
+        <span>Captured Notes (Tap to Edit)</span>
         <span id="note-count">0 calls</span>
       </div>
       <div class="feed-list" id="feed-list">
@@ -225,8 +270,7 @@
   </footer>
 
   <script>
-    let calibrationMode = 'easywrite'; // 'easywrite' or 'standard'
-
+    let calibrationMode = 'easywrite';
     let wakeLock = null;
     let isRecordingCorner = false;
     let currentCornerPoints = [];
@@ -235,6 +279,7 @@
     let lastCornerEndPoint = null;
     let watchPositionId = null;
     let totalStageDistance = 0;
+    let activeEditIndex = null;
 
     const actionBtn = document.getElementById('action-btn');
     const btnLabel = document.getElementById('btn-label');
@@ -246,7 +291,6 @@
     const noteCount = document.getElementById('note-count');
     const modeToggleBtn = document.getElementById('mode-toggle-btn');
 
-    // Toggle Calibration Profile
     modeToggleBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (calibrationMode === 'easywrite') {
@@ -260,11 +304,9 @@
       }
     });
 
-    // Ensure document body has focus for keyboard remote events
     window.addEventListener('DOMContentLoaded', () => { document.body.focus(); });
     window.addEventListener('click', () => { document.body.focus(); });
 
-    // Wake Lock API Resiliency
     async function requestWakeLock() {
       if ('wakeLock' in navigator && !wakeLock) {
         try {
@@ -289,7 +331,6 @@
       }
     });
 
-    // Audio Context Resiliency
     let audioCtx = null;
     function getAudioContext() {
       if (!audioCtx) {
@@ -319,7 +360,21 @@
       }
     }
 
-    // Hook into Media Session API for Bluetooth Remote triggers
+    function speakCall(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        let spokenText = text
+          .replace('R', 'Right ')
+          .replace('L', 'Left ')
+          .replace('LONG', ' long');
+        
+        const utterance = new SpeechSynthesisUtterance(spokenText);
+        utterance.rate = 1.2;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
     if ('mediaSession' in navigator) {
       try {
         const handleMediaAction = () => { triggerAction(); };
@@ -334,7 +389,7 @@
           album: 'Stage Notes Active'
         });
       } catch (err) {
-        console.log('Media Session not supported or blocked', err);
+        console.log('Media Session not supported', err);
       }
     }
 
@@ -370,7 +425,6 @@
 
       if (isRecordingCorner) {
         currentCornerPoints.push(pt);
-        // Live preview calculation while driving through the bend
         if (currentCornerPoints.length >= 3) {
           const previewNote = evaluateCorner(currentCornerPoints);
           btnLabel.innerText = previewNote.text;
@@ -477,7 +531,7 @@
       else longThreshold = 120;
 
       let modifier = totalCornerMeters > longThreshold ? ' LONG' : '';
-      return { dir, text: `${dir}${grade}${modifier}`, segmentLen: Math.round(totalCornerMeters) };
+      return { dir, grade, isLong: totalCornerMeters > longThreshold, text: `${dir}${grade}${modifier}`, segmentLen: Math.round(totalCornerMeters) };
     }
 
     function processCapturedCorner(points) {
@@ -502,13 +556,41 @@
       capturedNotes.push({
         type: cornerResult.dir,
         text: cornerResult.text,
+        dir: cornerResult.dir,
+        grade: cornerResult.grade,
+        isLong: cornerResult.isLong,
         segmentLen: cornerResult.segmentLen,
         accumDist: Math.round(totalStageDistance)
       });
 
+      speakCall(cornerResult.text);
       lastCornerEndPoint = points[points.length - 1];
+      activeEditIndex = null;
       renderFeed();
     }
+
+    window.modifyNote = function(index, action) {
+      let note = capturedNotes[index];
+      if (note.type === 'STRAIGHT') return;
+
+      if (action === 'tighter' && note.grade > 1) note.grade--;
+      if (action === 'wider' && note.grade < 6) note.grade++;
+      if (action === 'toggleLong') note.isLong = !note.isLong;
+      if (action === 'toggleDir') note.dir = note.dir === 'R' ? 'L' : 'R';
+      if (action === 'delete') {
+        capturedNotes.splice(index, 1);
+        activeEditIndex = null;
+        renderFeed();
+        return;
+      }
+
+      note.type = note.dir;
+      let modStr = note.isLong ? ' LONG' : '';
+      note.text = `${note.dir}${note.grade}${modStr}`;
+      
+      speakCall(note.text);
+      renderFeed();
+    };
 
     function haversineDistance(p1, p2) {
       const R = 6371000;
@@ -539,16 +621,40 @@
       feedList.innerHTML = '';
       let callCount = 0;
 
-      capturedNotes.forEach(note => {
+      capturedNotes.forEach((note, idx) => {
         if (note.type !== 'STRAIGHT') callCount++;
 
-        const item = document.createElement('div');
-        item.className = `feed-item ${note.type}`;
-        item.innerHTML = `
-          <div class="feed-call">${note.text}</div>
-          <div class="feed-meta">+${note.accumDist}m | ${note.segmentLen}m len</div>
+        const wrapper = document.createElement('div');
+        let isOpen = activeEditIndex === idx;
+        wrapper.className = `feed-item-wrapper ${note.type} ${isOpen ? 'editing' : ''}`;
+        
+        wrapper.innerHTML = `
+          <div class="feed-item-main" onclick="activeEditIndex = (${activeEditIndex} === ${idx} ? null : ${idx}); renderFeed();">
+            <div class="feed-call">${note.text}</div>
+            <div class="feed-meta">+${note.accumDist}m | ${note.segmentLen}m len</div>
+          </div>
+          ${note.type !== 'STRAIGHT' ? `
+            <div class="edit-drawer ${isOpen ? 'open' : ''}">
+              <button class="edit-btn" onclick="modifyNote(${idx}, 'toggleDir')">Switch R/L</button>
+              <button class="edit-btn" onclick="modifyNote(${idx}, 'tighter')">- Tighter (1)</button>
+              <button class="edit-btn" onclick="modifyNote(${idx}, 'wider')">+ Wider (6)</button>
+              <button class="edit-btn" onclick="modifyNote(${idx}, 'toggleLong')">Toggle LONG</button>
+              <button class="edit-btn" style="grid-column: span 2;" onclick="activeEditIndex = null; renderFeed();">Close</button>
+              <button class="edit-btn danger" onclick="modifyNote(${idx}, 'delete')">Delete Note</button>
+            </div>
+          ` : `
+            <div class="edit-drawer ${isOpen ? 'open' : ''}">
+              <button class="edit-btn danger" onclick="modifyNote(${idx}, 'delete')">Delete Straight</button>
+            </div>
+          `}
         `;
-        feedList.insertBefore(item, feedList.firstChild);
+        feedList.insertBefore(wrapper, feedList.firstChild);
+
+        if (isOpen) {
+          setTimeout(() => {
+            wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }, 50);
+        }
       });
 
       noteCount.innerText = `${callCount} calls`;
