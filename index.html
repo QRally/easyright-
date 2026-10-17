@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Live Recce Pace Logger v1.8</title>
+  <title>Live Recce Pace Logger v1.9</title>
   <style>
     :root {
       --bg-color: #0d0d11;
@@ -370,6 +370,12 @@
 
       if (isRecordingCorner) {
         currentCornerPoints.push(pt);
+        // Live preview calculation while driving through the bend
+        if (currentCornerPoints.length >= 3) {
+          const previewNote = evaluateCorner(currentCornerPoints);
+          btnLabel.innerText = previewNote.text;
+          btnSubtext.innerText = "Live Preview (Click on exit)";
+        }
       }
     }
 
@@ -377,23 +383,28 @@
       getAudioContext();
       requestWakeLock();
 
-      // Enforce robust DOM class inspection to keep UI state and triggers permanently synced
       const recordingActive = actionBtn.classList.contains('recording');
 
       if (!recordingActive) {
         isRecordingCorner = true;
         actionBtn.classList.add('recording');
-        btnLabel.innerText = 'END CORNER';
-        btnSubtext.innerText = 'Click remote on exit';
+        btnLabel.innerText = 'REC...';
+        btnSubtext.innerText = 'Driving through bend';
         playBeep(880, 'sine', 0.15);
         currentCornerPoints = [...rollingBuffer];
       } else {
         isRecordingCorner = false;
         actionBtn.classList.remove('recording');
+        
+        if (currentCornerPoints.length >= 3) {
+          processCapturedCorner(currentCornerPoints);
+        } else {
+          alert("Not enough GPS points captured. Drive further through the bend.");
+        }
+
         btnLabel.innerText = 'START CORNER';
         btnSubtext.innerText = 'Click remote at turn-in';
         playBeep(440, 'sine', 0.25);
-        processCapturedCorner(currentCornerPoints);
         currentCornerPoints = [];
       }
     }
@@ -420,27 +431,7 @@
     window.addEventListener('keydown', handleKeyEvent);
     window.addEventListener('keyup', handleKeyEvent);
 
-    function processCapturedCorner(points) {
-      if (points.length < 3) {
-        alert("Not enough GPS points captured. Drive further through the bend.");
-        return;
-      }
-
-      if (lastCornerEndPoint && points.length > 0) {
-        const dMeters = haversineDistance(lastCornerEndPoint, points[0]);
-        const straightDistCall = Math.round(dMeters / 10) * 10;
-        totalStageDistance += dMeters;
-
-        if (straightDistCall >= 30) {
-          capturedNotes.push({
-            type: 'STRAIGHT',
-            text: `${straightDistCall}`,
-            segmentLen: Math.round(dMeters),
-            accumDist: Math.round(totalStageDistance)
-          });
-        }
-      }
-
+    function evaluateCorner(points) {
       const xy = convertToMeters(points);
       let minR = 9999;
       let rCount = 0, lCount = 0;
@@ -479,24 +470,39 @@
       }
 
       const totalCornerMeters = haversineDistance(points[0], points[points.length - 1]);
-      totalStageDistance += totalCornerMeters;
 
       let longThreshold = 70;
-      if (grade <= 2) {
-        longThreshold = 45;
-      } else if (grade <= 4) {
-        longThreshold = 75;
-      } else {
-        longThreshold = 120;
-      }
+      if (grade <= 2) longThreshold = 45;
+      else if (grade <= 4) longThreshold = 75;
+      else longThreshold = 120;
 
       let modifier = totalCornerMeters > longThreshold ? ' LONG' : '';
-      const noteText = `${dir}${grade}${modifier}`;
+      return { dir, text: `${dir}${grade}${modifier}`, segmentLen: Math.round(totalCornerMeters) };
+    }
+
+    function processCapturedCorner(points) {
+      if (lastCornerEndPoint && points.length > 0) {
+        const dMeters = haversineDistance(lastCornerEndPoint, points[0]);
+        const straightDistCall = Math.round(dMeters / 10) * 10;
+        totalStageDistance += dMeters;
+
+        if (straightDistCall >= 30) {
+          capturedNotes.push({
+            type: 'STRAIGHT',
+            text: `${straightDistCall}`,
+            segmentLen: Math.round(dMeters),
+            accumDist: Math.round(totalStageDistance)
+          });
+        }
+      }
+
+      const cornerResult = evaluateCorner(points);
+      totalStageDistance += cornerResult.segmentLen;
 
       capturedNotes.push({
-        type: dir,
-        text: noteText,
-        segmentLen: Math.round(totalCornerMeters),
+        type: cornerResult.dir,
+        text: cornerResult.text,
+        segmentLen: cornerResult.segmentLen,
         accumDist: Math.round(totalStageDistance)
       });
 
