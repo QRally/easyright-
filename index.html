@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Live Recce Pace Logger v1.7</title>
+  <title>Live Recce Pace Logger v1.8</title>
   <style>
     :root {
       --bg-color: #0d0d11;
@@ -377,7 +377,10 @@
       getAudioContext();
       requestWakeLock();
 
-      if (!isRecordingCorner) {
+      // Enforce robust DOM class inspection to keep UI state and triggers permanently synced
+      const recordingActive = actionBtn.classList.contains('recording');
+
+      if (!recordingActive) {
         isRecordingCorner = true;
         actionBtn.classList.add('recording');
         btnLabel.innerText = 'END CORNER';
@@ -478,7 +481,6 @@
       const totalCornerMeters = haversineDistance(points[0], points[points.length - 1]);
       totalStageDistance += totalCornerMeters;
 
-      // Fixed: properly declared longThreshold
       let longThreshold = 70;
       if (grade <= 2) {
         longThreshold = 45;
