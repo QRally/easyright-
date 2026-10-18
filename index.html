@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Live Recce Pace Logger v2.3</title>
+  <title>Live Recce Pace Logger v2.4</title>
   <style>
     :root {
       --bg-color: #0d0d11;
@@ -162,7 +162,7 @@
       overflow: hidden;
       border-left: 4px solid var(--accent-blue);
       font-family: var(--font-mono);
-      flex-shrink: 0; /* Prevents rows from squishing */
+      flex-shrink: 0;
       min-height: 48px;
     }
     .feed-item-wrapper.editing {
@@ -360,13 +360,15 @@
       }
     }
 
+    // Precise Text-to-Speech parser
     function speakCall(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
+        
         let spokenText = text
-          .replace('R', 'Right ')
-          .replace('L', 'Left ')
-          .replace('LONG', ' long');
+          .replace(/\bR(\d)/g, 'Right $1')
+          .replace(/\bL(\d)/g, 'Left $1')
+          .replace(/LONG/g, 'long');
         
         const utterance = new SpeechSynthesisUtterance(spokenText);
         utterance.rate = 1.2;
